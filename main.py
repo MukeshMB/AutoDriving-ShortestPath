@@ -5,6 +5,8 @@ WIN = pygame.display.set_mode((WIDTH, WIDTH))
 pygame.display.set_caption('Shortest path auto driving')
 car = pygame.image.load('assets/austin.png')
 car = pygame.transform.scale(car, (50, 70))
+car_x = -50
+car_y = -50
 
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -87,7 +89,7 @@ class Node:
 
 def make_grid(rows, width):
     grid = []
-    gap = width//rows
+    gap = width // rows
     for i in range(rows):
         grid.append([])
         for j in range(rows):
@@ -156,29 +158,92 @@ def algorithm(grid, start, end):
                 draw(WIN, grid, grid[i][j].total_rows, grid[i][j].width)
 
 
-def drive(win, car_x, car_y):
+def steer(win, vard, car_x, car_y):
+    left_px = BLUE
+    up_px = BLUE
+    down_px = BLUE
+    right_px = BLUE
+    if car_x + 25 < WIDTH and car_y - 30 > 0:
+        up_px = win.get_at((car_x + 25, car_y - 30))[0:3]
+    if car_x + 25 < 900 and car_y + 80 < WIDTH:
+        down_px = win.get_at((car_x + 25, car_y + 80))[0:3]
+    if car_x + 80 < WIDTH and car_y + 30 < WIDTH:
+        right_px = win.get_at((car_x + 80, car_y + 40))[0:3]
+    if car_x - 40 > 0 and car_y + 40 < WIDTH:
+        left_px = win.get_at((car_x - 40, car_y + 40))[0:3]
+
+    print('up pixel: ', up_px)
+    print('down pixel: ', down_px)
+    print('right pixel: ', right_px)
+    print('left pixel: ', left_px)
+    #pygame.draw.circle(win, (0, 0, 225), (car_x + 25, car_y - 50), 5, 5)
+    #pygame.draw.circle(win, (0, 0, 225), (car_x + 25, car_y + 60), 5, 5)
+    #pygame.draw.circle(win, (0, 0, 225), (car_x + 100, car_y + 40), 5, 5)
+    #pygame.draw.circle(win, (0, 0, 225), (car_x - 60, car_y + 40), 5, 5)
+
+    if vard == 'up':
+        if up_px == ORANGE or up_px == RED:
+            return 0, vard
+        elif right_px == ORANGE or right_px == RED:
+            return -90, 'right'
+        elif left_px == ORANGE or left_px == RED:
+            return 90, 'left'
+    elif vard == 'right':
+        if right_px == ORANGE or right_px == RED:
+            return 0, 'right'
+        elif (up_px == ORANGE or up_px == RED) and (right_px != ORANGE and right_px != RED):
+            return 90, 'up'
+        elif down_px == ORANGE or down_px == RED:
+            return -90, 'down'
+    elif vard == 'left':
+        if left_px == ORANGE or left_px == RED:
+            return 0, 'left'
+        elif (up_px == ORANGE or up_px == RED) and (left_px != ORANGE or left_px != RED):
+            return -90, 'up'
+        elif down_px == ORANGE or down_px == RED:
+            return 90, 'down'
+    elif vard == 'down':
+        if down_px == ORANGE or down_px == RED:
+            return 0, 'down'
+        elif right_px == ORANGE or right_px == RED:
+            return 90, 'right'
+        elif left_px == ORANGE or left_px == RED:
+            return -90, 'left'
+
+    elif down_px == ORANGE or down_px == RED:
+        return 180, 'down'
+
+    return 0, 'stop'
+
+
+def drive(win, grid, dir, car, car_x, car_y):
     clock = pygame.time.Clock()
     while True:
         clock.tick(60)
-        cam_x = car_x + 10
-        cam_y = car_y + 10
-        up_px = win.get_at((cam_x, cam_y))[3]
-        print(up_px)
-        win.blit(car, (car_x, car_y))
-        pygame.draw.circle(win, (0, 0, 225), (car_x - 10, car_y - 20), 5, 5)
+        turn, dir = steer(win, dir, car_x, car_y)
+        prev_x = car_x
+        prev_y = car_y
+        car = pygame.transform.rotate(car, turn)
+        if dir == 'up':
+            car_y -= 1
+        elif dir == 'right':
+            car_x += 1
+        elif dir == 'left':
+            car_x -= 1
+        elif dir == 'down':
+            car_y += 1
+        print('steer: ', dir)
+        win.blit(car, (prev_x, prev_y))
         pygame.display.update()
 
 
-def main(win, width):
+def main(win, width, car_x, car_y):
     rows = 10
     grid = make_grid(rows, width)
 
     start = None
     end = None
     run = True
-    started = False
-    car_x = -50
-    car_y = -50
 
     while run:
         draw(win, grid, rows, width)
@@ -194,7 +259,11 @@ def main(win, width):
                 if not start and spot != end:
                     start = spot
                     start.make_start()
-                    car_x, car_y = pos
+                    car_x, car_y = spot.get_pos()
+                    car_x *= spot.width
+                    car_x += ((spot.width - 50) // 2)
+                    car_y *= spot.width
+                    car_y += ((spot.width - 70) // 2)
 
                 elif not end and spot != start:
                     end = spot
@@ -214,19 +283,21 @@ def main(win, width):
                     end = None
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE and not started:
+                if event.key == pygame.K_SPACE:
                     for row in grid:
                         for spot in row:
                             spot.update_neighbors(grid)
                     algorithm(grid, start, end)
                     run = False
+    run = False
+    return car_x, car_y, grid
 
-    drive(win, car_x, car_y)
 
+if __name__ == "__main__":
+    car_x, car_y, grid= main(WIN, WIDTH, car_x, car_y)
+    dir = 'up'
+    drive(WIN, grid, dir, car, car_x, car_y)
     pygame.quit()
-
-
-main(WIN, WIDTH)
 
 
 
